@@ -724,8 +724,13 @@ function winGame() {
     const stepsPerSec = elapsedSec > 0 ? (state.steps / elapsedSec).toFixed(2) : '0.00';
     const diffLabel = state.difficulty.charAt(0).toUpperCase() + state.difficulty.slice(1);
 
+    const fogLabel = state.fogOfWar ? 'On' : 'Off';
+    const soulLabel = state.movingGoal ? 'On' : 'Off';
+
     document.getElementById('win-stats').innerHTML =
         `<p>Difficulty: <span>${diffLabel}</span></p>` +
+        `<p>Fog of War: <span>${fogLabel}</span></p>` +
+        `<p>Moving Soulmate: <span>${soulLabel}</span></p>` +
         `<p>Time: <span>${time}</span></p>` +
         `<p>Steps: <span>${state.steps}</span></p>` +
         `<p>Avg: <span>${stepsPerSec} steps/sec</span></p>`;
@@ -753,6 +758,14 @@ function winGame() {
 
 // ---- Input handling ----
 document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        if (menuScreen.classList.contains('active') || winScreen.classList.contains('active')) {
+            e.preventDefault();
+            startGame();
+            return;
+        }
+    }
+
     if (!gameScreen.classList.contains('active')) return;
 
     switch (e.key) {

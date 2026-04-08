@@ -6,16 +6,16 @@ A browser-based maze game where you navigate through a maze to find your love.
 
 ## Features
 
-- **Character select** -- choose Boy or Girl; the goal is the opposite gender
+- **Character select** -- choose Boy or Girl; the soulmate is the opposite gender
 - **3 difficulty levels** -- Easy (15x15), Medium (25x25), Hard (50x50)
 - **Camera view** -- larger mazes scroll with the player; easy shows the full maze
 - **Fog of War** (toggle) -- limits vision to adjacent cells for a spookier experience
-- **Moving Goal** (toggle, on by default) -- the goal wanders the maze
+- **Moving Soulmate** (toggle, on by default) -- the soulmate wanders the maze
   - Starts at 1 step/sec, random movement
   - Dialogue interaction sequence triggers BFS pathfinding at 1.5 steps/sec
   - Slows to 0.5 steps/sec within 3 steps; freezes when adjacent
-- **Dialogue system** -- both characters shout phrases; trigger an interaction sequence to call the goal toward you
-- **Timer and stats** -- completion screen shows difficulty, time, steps, and average steps/sec
+- **Dialogue system** -- both characters shout phrases; trigger an interaction sequence to call the soulmate toward you
+- **Timer and stats** -- completion screen shows difficulty, fog/soulmate settings, time, steps, and average steps/sec
 - **Mobile support** -- on-screen d-pad for touch devices
 
 ## Controls
