@@ -17,12 +17,17 @@ const state = {
     movingGoal: false,
     goalInterval: null,
     steps: 0,
+    goalDialogue: null,
+    playerDialogue: null,
+    dialogueInterval: null,
+    calledOut: false,  // true after player completes "I'm lost!" → "I'm here!" sequence
+    goalSpeed: 1,      // steps per second
 };
 
 const DIFFICULTIES = {
-    easy:   { size: 15, minDist: 30, goalMoveMs: 2000, loopWalls: 10 },
+    easy:   { size: 15, minDist: 30, goalMoveMs: 1000, loopWalls: 10 },
     medium: { size: 25, minDist: 45, goalMoveMs: 1000, loopWalls: 25 },
-    hard:   { size: 50, minDist: 75, goalMoveMs: 500, loopWalls: 60 },
+    hard:   { size: 50, minDist: 75, goalMoveMs: 1000, loopWalls: 60 },
 };
 
 // ---- DOM refs ----
@@ -78,6 +83,7 @@ function showScreen(screen) {
 function backToMenu() {
     stopTimer();
     stopGoalMovement();
+    stopDialogue();
     showScreen(menuScreen);
 }
 
@@ -153,11 +159,24 @@ function moveGoalRandomly() {
 }
 
 function startGoalMovement(intervalMs) {
-    const moveFn = state.difficulty === 'easy' ? moveGoalTowardsPlayer : moveGoalRandomly;
+    // Always start with random movement
     state.goalInterval = setTimeout(() => {
-        moveFn();
-        state.goalInterval = setInterval(moveFn, intervalMs);
+        moveGoalRandomly();
+        state.goalInterval = setInterval(moveGoalRandomly, intervalMs);
     }, 1000);
+}
+
+function switchGoalToBFS() {
+    stopGoalMovement();
+    const ms = Math.round(1000 / state.goalSpeed);
+    moveGoalTowardsPlayer();
+    state.goalInterval = setInterval(moveGoalTowardsPlayer, ms);
+}
+
+function restartGoalAtCurrentSpeed() {
+    stopGoalMovement();
+    const ms = Math.round(1000 / state.goalSpeed);
+    state.goalInterval = setInterval(moveGoalTowardsPlayer, ms);
 }
 
 function stopGoalMovement() {
@@ -168,6 +187,194 @@ function stopGoalMovement() {
     }
 }
 
+// ---- Dialogue bubbles ----
+const PLAYER_DIALOGUES_DEFAULT = [
+    "I'm lost!",
+    "Where are you?",
+    "I'm here!",
+    "On my way!",
+];
+
+const GOAL_DIALOGUES_BEFORE = [
+    "I'm lost!",
+    "Oh dear...",
+    "Where are you?",
+];
+
+const GOAL_DIALOGUES_AFTER = [
+    "Wait there!",
+    "On my way!",
+];
+
+const GOAL_DIALOGUES_NEARBY = [
+    "I can hear you!",
+];
+
+const GOAL_DIALOGUES_NEAR = [
+    "There you are!",
+    "Reunited at last :D",
+];
+
+const PLAYER_DIALOGUES_NEAR = [
+    "Hey there!",
+];
+
+// Interaction sequence: player says "I'm lost!" → goal replies "Where are you?"
+// Then player says "I'm here!" → goal replies "On my way!" → goal switches to BFS
+const INTERACTION = {
+    "I'm lost!":  { goalReply: "Where are you?", next: true },
+    "I'm here!":  { goalReply: "On my way!", activateBFS: true },
+};
+
+function euclideanDist() {
+    const dx = state.playerX - state.goalX;
+    const dy = state.playerY - state.goalY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function isGoalNear() {
+    const dist = bfsDistances(state.maze, state.playerX, state.playerY);
+    return dist[state.goalY][state.goalX] <= 3;
+}
+
+function getGoalDialogues() {
+    if (isGoalNear()) return GOAL_DIALOGUES_NEAR;
+    if (euclideanDist() <= 5) return GOAL_DIALOGUES_NEARBY;
+    return state.calledOut ? GOAL_DIALOGUES_AFTER : GOAL_DIALOGUES_BEFORE;
+}
+
+function getPlayerDialogues() {
+    if (isGoalNear()) return PLAYER_DIALOGUES_NEAR;
+    return PLAYER_DIALOGUES_DEFAULT;
+}
+
+function startDialogue() {
+    function scheduleNext() {
+        const delay = 3000 + Math.random() * 3000;
+        state.dialogueInterval = setTimeout(() => {
+            if (state.won) return;
+            const pool = getGoalDialogues();
+            const text = pool[Math.floor(Math.random() * pool.length)];
+            showGoalDialogue(text);
+            scheduleNext();
+        }, delay);
+    }
+    scheduleNext();
+}
+
+function showGoalDialogue(text) {
+    state.goalDialogue = text;
+    render();
+    setTimeout(() => {
+        if (state.goalDialogue === text) {
+            state.goalDialogue = null;
+            render();
+        }
+    }, 2000);
+}
+
+function stopDialogue() {
+    if (state.dialogueInterval) {
+        clearTimeout(state.dialogueInterval);
+        state.dialogueInterval = null;
+    }
+    state.goalDialogue = null;
+    state.playerDialogue = null;
+}
+
+function updateShoutButtons() {
+    const dialogues = getPlayerDialogues();
+    const buttons = document.querySelectorAll('.shout-btn');
+    buttons.forEach((btn, i) => {
+        if (i < dialogues.length) {
+            btn.textContent = `[${i + 1}] ${dialogues[i]}`;
+            btn.style.display = '';
+        } else {
+            btn.style.display = 'none';
+        }
+    });
+}
+
+function playerShout(text) {
+    if (state.won) return;
+    state.playerDialogue = text;
+    render();
+    setTimeout(() => {
+        if (state.playerDialogue === text) {
+            state.playerDialogue = null;
+            render();
+        }
+    }, 2000);
+
+    // Check for interaction sequence
+    const interaction = INTERACTION[text];
+    if (interaction) {
+        setTimeout(() => {
+            if (state.won) return;
+            showGoalDialogue(interaction.goalReply);
+            if (interaction.activateBFS && state.movingGoal && !state.calledOut) {
+                state.calledOut = true;
+                state.goalSpeed = 1.5;
+                switchGoalToBFS();
+            }
+        }, 1000);
+    }
+
+    // Post-sequence: "I'm here!" boosts goal speed by 0.5, up to 3
+    if (text === "I'm here!" && state.calledOut && state.movingGoal) {
+        setTimeout(() => {
+            if (state.won) return;
+            showGoalDialogue("On my way!");
+            if (state.goalSpeed < 3) {
+                state.goalSpeed = Math.min(3, state.goalSpeed + 0.5);
+                restartGoalAtCurrentSpeed();
+            }
+        }, 1000);
+    }
+}
+
+function drawDialogueBubble(ctx, text, x, y, cs) {
+    ctx.save();
+    ctx.font = `bold ${Math.max(10, cs * 0.35)}px sans-serif`;
+    const metrics = ctx.measureText(text);
+    const padX = 6;
+    const padY = 4;
+    const bw = metrics.width + padX * 2;
+    const bh = cs * 0.4 + padY * 2;
+    const bx = x + cs / 2 - bw / 2;
+    const by = y - bh - 4;
+
+    // Bubble background
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    // Tail triangle
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(x + cs / 2 - 4, by + bh);
+    ctx.lineTo(x + cs / 2, by + bh + 5);
+    ctx.lineTo(x + cs / 2 + 4, by + bh);
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.beginPath();
+    ctx.moveTo(x + cs / 2 - 4, by + bh);
+    ctx.lineTo(x + cs / 2, by + bh + 5);
+    ctx.lineTo(x + cs / 2 + 4, by + bh);
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = '#333';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + cs / 2, by + bh / 2);
+    ctx.restore();
+}
+
 // ---- Game init ----
 function startGame() {
     const diff = DIFFICULTIES[state.difficulty];
@@ -175,9 +382,12 @@ function startGame() {
     state.mazeHeight = diff.size;
     state.won = false;
     state.steps = 0;
+    state.calledOut = false;
+    state.goalSpeed = 1;
     state.fogOfWar = document.getElementById('fog-toggle').checked;
     state.movingGoal = document.getElementById('moving-goal-toggle').checked;
     stopGoalMovement();
+    stopDialogue();
 
     // Generate maze then add loops
     state.maze = generateMaze(state.mazeWidth, state.mazeHeight);
@@ -202,11 +412,13 @@ function startGame() {
         if (state.movingGoal) {
             startGoalMovement(diff.goalMoveMs);
         }
+        startDialogue();
     });
 }
 
 // ---- Canvas sizing ----
 const VIEW_CELLS_FOG = 7; // 7x7 viewport when fog is on
+const MAZE_PADDING = 30;  // pixels of padding around the maze for dialogue bubbles
 
 function resizeCanvas() {
     const wrapper = document.querySelector('.canvas-wrapper');
@@ -214,20 +426,17 @@ function resizeCanvas() {
     const availH = wrapper.clientHeight;
 
     if (state.fogOfWar) {
-        // Internal resolution for fog viewport
         const cellRes = 48;
         state.cellSize = cellRes;
-        canvas.width = VIEW_CELLS_FOG * cellRes;
-        canvas.height = VIEW_CELLS_FOG * cellRes;
+        canvas.width = VIEW_CELLS_FOG * cellRes + MAZE_PADDING * 2;
+        canvas.height = VIEW_CELLS_FOG * cellRes + MAZE_PADDING * 2;
     } else {
-        // Internal resolution for full maze
         const cellRes = 16;
         state.cellSize = cellRes;
-        canvas.width = state.mazeWidth * cellRes;
-        canvas.height = state.mazeHeight * cellRes;
+        canvas.width = state.mazeWidth * cellRes + MAZE_PADDING * 2;
+        canvas.height = state.mazeHeight * cellRes + MAZE_PADDING * 2;
     }
 
-    // Scale canvas element to fill available space while keeping aspect ratio
     const scaleX = availW / canvas.width;
     const scaleY = availH / canvas.height;
     const scale = Math.min(scaleX, scaleY);
@@ -242,6 +451,7 @@ function render() {
     } else {
         renderFull();
     }
+    updateShoutButtons();
 }
 
 function renderFull() {
@@ -252,6 +462,9 @@ function renderFull() {
 
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(MAZE_PADDING, MAZE_PADDING);
 
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
@@ -288,6 +501,16 @@ function renderFull() {
     const playerSprite = getPlayerSprite(state.gender);
     const playerPalette = getPlayerPalette(state.gender);
     drawSprite(ctx, playerSprite, state.playerX * cs, state.playerY * cs, cs, playerPalette);
+
+    // Dialogue bubbles
+    if (state.goalDialogue) {
+        drawDialogueBubble(ctx, state.goalDialogue, state.goalX * cs, state.goalY * cs, cs);
+    }
+    if (state.playerDialogue) {
+        drawDialogueBubble(ctx, state.playerDialogue, state.playerX * cs, state.playerY * cs, cs);
+    }
+
+    ctx.restore();
 }
 
 function renderFog() {
@@ -303,6 +526,9 @@ function renderFog() {
 
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(MAZE_PADDING, MAZE_PADDING);
 
     for (let vy = 0; vy < VIEW_CELLS_FOG; vy++) {
         for (let vx = 0; vx < VIEW_CELLS_FOG; vx++) {
@@ -336,12 +562,18 @@ function renderFog() {
                 drawSprite(ctx, getGoalSprite(state.gender), sx, sy, cs, getGoalPalette(state.gender));
                 const hs = cs * 0.5;
                 drawSpriteScaled(ctx, SPRITE_HEART, sx + (cs - hs) / 2, sy - hs * 0.3, hs, getHeartPalette());
+                if (state.goalDialogue) {
+                    drawDialogueBubble(ctx, state.goalDialogue, sx, sy, cs);
+                }
             }
         }
     }
 
     // Player at center
     drawSprite(ctx, getPlayerSprite(state.gender), half * cs, half * cs, cs, getPlayerPalette(state.gender));
+    if (state.playerDialogue) {
+        drawDialogueBubble(ctx, state.playerDialogue, half * cs, half * cs, cs);
+    }
 
     // Fog gradient
     const centerX = (half + 0.5) * cs;
@@ -350,7 +582,9 @@ function renderFog() {
     grad.addColorStop(0, 'rgba(0,0,0,0)');
     grad.addColorStop(1, 'rgba(0,0,0,1)');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(-MAZE_PADDING, -MAZE_PADDING, canvas.width, canvas.height);
+
+    ctx.restore();
 }
 
 // ---- Movement ----
@@ -387,6 +621,7 @@ function winGame() {
     state.won = true;
     stopTimer();
     stopGoalMovement();
+    stopDialogue();
     const time = getElapsedTime();
     const elapsedSec = (Date.now() - state.timerStart) / 1000;
     const stepsPerSec = elapsedSec > 0 ? (state.steps / elapsedSec).toFixed(2) : '0.00';
@@ -440,7 +675,21 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             movePlayer(1, 0);
             break;
+        case '1': { const d = getPlayerDialogues(); if (d[0]) playerShout(d[0]); break; }
+        case '2': { const d = getPlayerDialogues(); if (d[1]) playerShout(d[1]); break; }
+        case '3': { const d = getPlayerDialogues(); if (d[2]) playerShout(d[2]); break; }
+        case '4': { const d = getPlayerDialogues(); if (d[3]) playerShout(d[3]); break; }
     }
+});
+
+// Shout buttons
+document.querySelectorAll('.shout-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (!gameScreen.classList.contains('active')) return;
+        const idx = parseInt(btn.dataset.index);
+        const d = getPlayerDialogues();
+        if (d[idx]) playerShout(d[idx]);
+    });
 });
 
 // Mobile d-pad
