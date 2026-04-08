@@ -22,6 +22,8 @@ const state = {
     dialogueInterval: null,
     calledOut: false,  // true after player completes "I'm lost!" → "I'm here!" sequence
     goalSpeed: 1,      // steps per second
+    goalSlowed: false, // true once goal slows near player
+    goalFrozen: false, // true when goal is 1 step away
 };
 
 const DIFFICULTIES = {
@@ -65,10 +67,10 @@ document.getElementById('menu-btn').addEventListener('click', backToMenu);
 function drawPreviews() {
     const maleCtx = document.getElementById('preview-male').getContext('2d');
     const femaleCtx = document.getElementById('preview-female').getContext('2d');
-    maleCtx.clearRect(0, 0, 64, 64);
-    femaleCtx.clearRect(0, 0, 64, 64);
-    drawSpriteScaled(maleCtx, SPRITE_MALE, 0, 0, 64, getPlayerPalette('male'));
-    drawSpriteScaled(femaleCtx, SPRITE_FEMALE, 0, 0, 64, getPlayerPalette('female'));
+    maleCtx.clearRect(0, 0, 48, 48);
+    femaleCtx.clearRect(0, 0, 48, 48);
+    drawSpriteScaled(maleCtx, SPRITE_MALE, 0, 0, 48, getPlayerPalette('male'));
+    drawSpriteScaled(femaleCtx, SPRITE_FEMALE, 0, 0, 48, getPlayerPalette('female'));
 }
 drawPreviews();
 
@@ -145,6 +147,7 @@ function moveGoalTowardsPlayer() {
     state.goalX = pick.x;
     state.goalY = pick.y;
     render();
+    checkNearSlowdown();
 }
 
 function moveGoalRandomly() {
@@ -156,6 +159,43 @@ function moveGoalRandomly() {
     state.goalX = pick.x;
     state.goalY = pick.y;
     render();
+    checkNearSlowdown();
+}
+
+function getGoalBfsDist() {
+    const dist = bfsDistances(state.maze, state.playerX, state.playerY);
+    return dist[state.goalY][state.goalX];
+}
+
+function checkNearSlowdown() {
+    if (!state.movingGoal) return;
+    const d = getGoalBfsDist();
+
+    if (d <= 1) {
+        // Adjacent — freeze goal
+        if (!state.goalFrozen) {
+            state.goalFrozen = true;
+            stopGoalMovement();
+        }
+    } else if (state.goalFrozen) {
+        // Was frozen, player moved away — resume and say something
+        state.goalFrozen = false;
+        const unfreezeLines = ["Stop moving around!", "Come here!"];
+        showGoalDialogue(unfreezeLines[Math.floor(Math.random() * unfreezeLines.length)]);
+        const speed = state.goalSlowed ? 0.5 : state.goalSpeed;
+        const ms = Math.round(1000 / speed);
+        const moveFn = state.calledOut ? moveGoalTowardsPlayer : moveGoalRandomly;
+        state.goalInterval = setInterval(moveFn, ms);
+    } else if (!state.goalSlowed && d <= 3) {
+        // First time within 3 steps — slow down
+        state.goalSlowed = true;
+        state.goalSpeed = 0.5;
+        stopGoalMovement();
+        const ms = Math.round(1000 / state.goalSpeed);
+        state.goalInterval = setInterval(
+            state.calledOut ? moveGoalTowardsPlayer : moveGoalRandomly, ms
+        );
+    }
 }
 
 function startGoalMovement(intervalMs) {
@@ -384,6 +424,8 @@ function startGame() {
     state.steps = 0;
     state.calledOut = false;
     state.goalSpeed = 1;
+    state.goalSlowed = false;
+    state.goalFrozen = false;
     state.fogOfWar = document.getElementById('fog-toggle').checked;
     state.movingGoal = document.getElementById('moving-goal-toggle').checked;
     stopGoalMovement();
@@ -417,8 +459,9 @@ function startGame() {
 }
 
 // ---- Canvas sizing ----
-const VIEW_CELLS_FOG = 7; // 7x7 viewport when fog is on
-const MAZE_PADDING = 30;  // pixels of padding around the maze for dialogue bubbles
+const VIEW_CELLS_FOG = 7;
+const VIEW_CELLS_NORMAL = 15; // camera viewport matches easy maze size
+const MAZE_PADDING = 30;
 
 function resizeCanvas() {
     const wrapper = document.querySelector('.canvas-wrapper');
@@ -431,10 +474,12 @@ function resizeCanvas() {
         canvas.width = VIEW_CELLS_FOG * cellRes + MAZE_PADDING * 2;
         canvas.height = VIEW_CELLS_FOG * cellRes + MAZE_PADDING * 2;
     } else {
+        // Fixed viewport of VIEW_CELLS_NORMAL cells (or full maze if smaller)
+        const viewCells = Math.min(VIEW_CELLS_NORMAL, state.mazeWidth);
         const cellRes = 16;
         state.cellSize = cellRes;
-        canvas.width = state.mazeWidth * cellRes + MAZE_PADDING * 2;
-        canvas.height = state.mazeHeight * cellRes + MAZE_PADDING * 2;
+        canvas.width = viewCells * cellRes + MAZE_PADDING * 2;
+        canvas.height = viewCells * cellRes + MAZE_PADDING * 2;
     }
 
     const scaleX = availW / canvas.width;
@@ -442,6 +487,20 @@ function resizeCanvas() {
     const scale = Math.min(scaleX, scaleY);
     canvas.style.width = Math.floor(canvas.width * scale) + 'px';
     canvas.style.height = Math.floor(canvas.height * scale) + 'px';
+}
+
+// Calculate camera offset (top-left cell), clamped to maze edges
+function getCameraOffset() {
+    const viewCells = Math.min(VIEW_CELLS_NORMAL, state.mazeWidth);
+    const half = Math.floor(viewCells / 2);
+
+    // Center on player, clamp so camera doesn't go past maze edges
+    let camX = state.playerX - half;
+    let camY = state.playerY - half;
+    camX = Math.max(0, Math.min(camX, state.mazeWidth - viewCells));
+    camY = Math.max(0, Math.min(camY, state.mazeHeight - viewCells));
+
+    return { camX, camY, viewCells };
 }
 
 // ---- Rendering ----
@@ -457,8 +516,7 @@ function render() {
 function renderFull() {
     const cs = state.cellSize;
     const maze = state.maze;
-    const w = state.mazeWidth;
-    const h = state.mazeHeight;
+    const { camX, camY, viewCells } = getCameraOffset();
 
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -466,17 +524,20 @@ function renderFull() {
     ctx.save();
     ctx.translate(MAZE_PADDING, MAZE_PADDING);
 
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            const cell = maze[y][x];
-            const sx = x * cs;
-            const sy = y * cs;
+    // Draw only visible cells
+    for (let vy = 0; vy < viewCells; vy++) {
+        for (let vx = 0; vx < viewCells; vx++) {
+            const mx = camX + vx;
+            const my = camY + vy;
+            if (mx >= state.mazeWidth || my >= state.mazeHeight) continue;
 
-            // Floor
+            const cell = maze[my][mx];
+            const sx = vx * cs;
+            const sy = vy * cs;
+
             ctx.fillStyle = '#252540';
             ctx.fillRect(sx, sy, cs, cs);
 
-            // Walls
             ctx.strokeStyle = '#6488c8';
             ctx.lineWidth = Math.max(1, cs / 8);
 
@@ -487,27 +548,48 @@ function renderFull() {
         }
     }
 
-    // Draw goal
-    const goalSprite = getGoalSprite(state.gender);
-    const goalPalette = getGoalPalette(state.gender);
-    drawSprite(ctx, goalSprite, state.goalX * cs, state.goalY * cs, cs, goalPalette);
-    const heartSize = cs * 0.5;
-    drawSpriteScaled(ctx, SPRITE_HEART,
-        state.goalX * cs + (cs - heartSize) / 2,
-        state.goalY * cs - heartSize * 0.3,
-        heartSize, getHeartPalette());
+    // Screen positions relative to camera
+    const goalSX = (state.goalX - camX) * cs;
+    const goalSY = (state.goalY - camY) * cs;
+    const playerSX = (state.playerX - camX) * cs;
+    const playerSY = (state.playerY - camY) * cs;
+    const viewPx = viewCells * cs;
+
+    // Is goal on screen?
+    const goalOnScreen = state.goalX >= camX && state.goalX < camX + viewCells &&
+                         state.goalY >= camY && state.goalY < camY + viewCells;
+
+    // Draw goal if on screen
+    if (goalOnScreen) {
+        drawSprite(ctx, getGoalSprite(state.gender), goalSX, goalSY, cs, getGoalPalette(state.gender));
+        const heartSize = cs * 0.5;
+        drawSpriteScaled(ctx, SPRITE_HEART,
+            goalSX + (cs - heartSize) / 2,
+            goalSY - heartSize * 0.3,
+            heartSize, getHeartPalette());
+        if (state.goalDialogue) {
+            drawDialogueBubble(ctx, state.goalDialogue, goalSX, goalSY, cs);
+        }
+    } else if (state.goalDialogue) {
+        // Goal off-screen: show dialogue at edge of camera in goal's direction
+        const dx = state.goalX - state.playerX;
+        const dy = state.goalY - state.playerY;
+        let edgeX = Math.max(0, Math.min(goalSX, viewPx - cs));
+        let edgeY = Math.max(0, Math.min(goalSY, viewPx - cs));
+
+        // Clamp to edges
+        if (goalSX < 0) edgeX = 0;
+        else if (goalSX >= viewPx) edgeX = viewPx - cs;
+        if (goalSY < 0) edgeY = 0;
+        else if (goalSY >= viewPx) edgeY = viewPx - cs;
+
+        drawDialogueBubble(ctx, state.goalDialogue, edgeX, edgeY, cs);
+    }
 
     // Draw player
-    const playerSprite = getPlayerSprite(state.gender);
-    const playerPalette = getPlayerPalette(state.gender);
-    drawSprite(ctx, playerSprite, state.playerX * cs, state.playerY * cs, cs, playerPalette);
-
-    // Dialogue bubbles
-    if (state.goalDialogue) {
-        drawDialogueBubble(ctx, state.goalDialogue, state.goalX * cs, state.goalY * cs, cs);
-    }
+    drawSprite(ctx, getPlayerSprite(state.gender), playerSX, playerSY, cs, getPlayerPalette(state.gender));
     if (state.playerDialogue) {
-        drawDialogueBubble(ctx, state.playerDialogue, state.playerX * cs, state.playerY * cs, cs);
+        drawDialogueBubble(ctx, state.playerDialogue, playerSX, playerSY, cs);
     }
 
     ctx.restore();
@@ -584,6 +666,20 @@ function renderFog() {
     ctx.fillStyle = grad;
     ctx.fillRect(-MAZE_PADDING, -MAZE_PADDING, canvas.width, canvas.height);
 
+    // Goal dialogue at edge of viewport if goal is off-screen
+    if (state.goalDialogue) {
+        const goalSX = (state.goalX - camX) * cs;
+        const goalSY = (state.goalY - camY) * cs;
+        const viewPx = VIEW_CELLS_FOG * cs;
+        const goalOnScreen = goalSX >= 0 && goalSX < viewPx && goalSY >= 0 && goalSY < viewPx;
+
+        if (!goalOnScreen) {
+            let edgeX = Math.max(0, Math.min(goalSX, viewPx - cs));
+            let edgeY = Math.max(0, Math.min(goalSY, viewPx - cs));
+            drawDialogueBubble(ctx, state.goalDialogue, edgeX, edgeY, cs);
+        }
+    }
+
     ctx.restore();
 }
 
@@ -610,6 +706,7 @@ function movePlayer(dx, dy) {
     state.steps++;
 
     render();
+    checkNearSlowdown();
 
     // Check win
     if (nx === state.goalX && ny === state.goalY) {
