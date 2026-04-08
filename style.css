@@ -1,0 +1,339 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+}
+
+.screen {
+    display: none;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.screen.active {
+    display: flex;
+}
+
+/* ---- Menu Screen ---- */
+#menu-screen {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+
+h1 {
+    font-size: 2.5rem;
+    color: #e94560;
+    text-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+}
+
+.subtitle {
+    color: #888;
+    font-style: italic;
+    margin-bottom: 10px;
+}
+
+.menu-section {
+    text-align: center;
+}
+
+.menu-section h2 {
+    font-size: 1.1rem;
+    color: #aaa;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.character-select {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.char-btn {
+    background: #16213e;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 15px 25px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: #ccc;
+    font-size: 1rem;
+}
+
+.char-btn:hover {
+    border-color: #e94560;
+    background: #1a1a3e;
+}
+
+.char-btn.selected {
+    border-color: #e94560;
+    background: #2a1a3e;
+    box-shadow: 0 0 15px rgba(233, 69, 96, 0.3);
+    color: #fff;
+}
+
+.char-btn canvas {
+    image-rendering: pixelated;
+}
+
+.difficulty-select {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.diff-btn {
+    background: #16213e;
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #ccc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.diff-btn:hover {
+    border-color: #e94560;
+}
+
+.diff-btn.selected {
+    border-color: #e94560;
+    background: #2a1a3e;
+    box-shadow: 0 0 15px rgba(233, 69, 96, 0.3);
+    color: #fff;
+}
+
+.diff-name {
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.diff-desc {
+    font-size: 0.8rem;
+    color: #888;
+}
+
+.start-btn {
+    background: #e94560;
+    color: #fff;
+    border: none;
+    border-radius: 30px;
+    padding: 14px 50px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.start-btn:hover {
+    background: #ff6b81;
+    transform: scale(1.05);
+}
+
+.start-btn.secondary {
+    background: #333;
+}
+
+.start-btn.secondary:hover {
+    background: #555;
+}
+
+/* ---- Game Screen ---- */
+#game-screen {
+    flex-direction: column;
+    align-items: center;
+    background: #111;
+}
+
+.game-hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 10px 20px;
+    background: #1a1a2e;
+    z-index: 10;
+}
+
+.hud-btn {
+    background: none;
+    border: 1px solid #555;
+    color: #ccc;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.hud-btn:hover {
+    border-color: #e94560;
+    color: #fff;
+}
+
+.timer {
+    font-size: 1.4rem;
+    font-family: 'Courier New', monospace;
+    color: #e94560;
+    font-weight: bold;
+}
+
+.canvas-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    width: 100%;
+}
+
+#game-canvas {
+    image-rendering: pixelated;
+}
+
+/* ---- Mobile Controls ---- */
+.mobile-controls {
+    display: none;
+    padding: 10px 0 20px;
+    justify-content: center;
+    background: #1a1a2e;
+    width: 100%;
+}
+
+.dpad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.dpad-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.dpad-btn {
+    width: 60px;
+    height: 60px;
+    background: #2a2a4e;
+    border: 2px solid #444;
+    border-radius: 10px;
+    color: #ccc;
+    font-size: 1.4rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+.dpad-btn:active {
+    background: #e94560;
+    border-color: #e94560;
+}
+
+.dpad-center {
+    width: 60px;
+    height: 60px;
+}
+
+/* ---- Win Screen ---- */
+#win-screen {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 100;
+}
+
+.win-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    animation: fadeIn 0.5s ease;
+}
+
+.win-content h1 {
+    font-size: 2rem;
+}
+
+.win-content p {
+    font-size: 1.2rem;
+    color: #aaa;
+}
+
+#win-scene {
+    image-rendering: pixelated;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Show mobile controls on touch devices */
+@media (max-width: 768px), (pointer: coarse) {
+    .mobile-controls {
+        display: flex;
+    }
+}
+
+@media (max-width: 500px) {
+    h1 {
+        font-size: 1.8rem;
+    }
+
+    .char-btn {
+        padding: 10px 18px;
+    }
+
+    .diff-btn {
+        padding: 10px 16px;
+    }
+
+    .start-btn {
+        padding: 12px 36px;
+        font-size: 1rem;
+    }
+
+    .dpad-btn {
+        width: 50px;
+        height: 50px;
+    }
+
+    .dpad-center {
+        width: 50px;
+        height: 50px;
+    }
+}

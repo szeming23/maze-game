@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Game - game.jojomingming.org</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="menu-screen" class="screen active">
+        <h1>Maze of Hearts</h1>
+        <p class="subtitle">Find your way through the darkness</p>
+
+        <div class="menu-section">
+            <h2>Choose your character</h2>
+            <div class="character-select">
+                <button class="char-btn selected" data-gender="male" id="btn-male">
+                    <canvas id="preview-male" width="64" height="64"></canvas>
+                    <span>Boy</span>
+                </button>
+                <button class="char-btn" data-gender="female" id="btn-female">
+                    <canvas id="preview-female" width="64" height="64"></canvas>
+                    <span>Girl</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="menu-section">
+            <h2>Difficulty</h2>
+            <div class="difficulty-select">
+                <button class="diff-btn selected" data-difficulty="easy">
+                    <span class="diff-name">Easy</span>
+                    <span class="diff-desc">15 &times; 15</span>
+                </button>
+                <button class="diff-btn" data-difficulty="medium">
+                    <span class="diff-name">Medium</span>
+                    <span class="diff-desc">25 &times; 25</span>
+                </button>
+                <button class="diff-btn" data-difficulty="hard">
+                    <span class="diff-name">Hard</span>
+                    <span class="diff-desc">50 &times; 50</span>
+                </button>
+            </div>
+        </div>
+
+        <button id="start-btn" class="start-btn">Start Game</button>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div class="game-hud">
+            <button id="back-btn" class="hud-btn">&#9664; Menu</button>
+            <div id="timer" class="timer">00:00</div>
+        </div>
+        <div class="canvas-wrapper">
+            <canvas id="game-canvas"></canvas>
+        </div>
+        <div id="mobile-controls" class="mobile-controls">
+            <div class="dpad">
+                <button class="dpad-btn up" data-dir="up">&#9650;</button>
+                <div class="dpad-row">
+                    <button class="dpad-btn left" data-dir="left">&#9664;</button>
+                    <div class="dpad-center"></div>
+                    <button class="dpad-btn right" data-dir="right">&#9654;</button>
+                </div>
+                <button class="dpad-btn down" data-dir="down">&#9660;</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="win-screen" class="screen">
+        <div class="win-content">
+            <canvas id="win-scene" width="200" height="200"></canvas>
+            <h1>You found your love!</h1>
+            <p id="win-time"></p>
+            <button id="play-again-btn" class="start-btn">Play Again</button>
+            <button id="menu-btn" class="start-btn secondary">Main Menu</button>
+        </div>
+    </div>
+
+    <script src="sprites.js"></script>
+    <script src="maze.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
