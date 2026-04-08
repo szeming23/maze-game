@@ -14,12 +14,15 @@ const state = {
     timerInterval: null,
     won: false,
     fogOfWar: false,
+    movingGoal: false,
+    goalInterval: null,
+    steps: 0,
 };
 
 const DIFFICULTIES = {
-    easy:   { size: 10, minDist: 30 },
-    medium: { size: 20, minDist: 45 },
-    hard:   { size: 40, minDist: 75 },
+    easy:   { size: 10, minDist: 30, goalMoveMs: 2000 },
+    medium: { size: 20, minDist: 45, goalMoveMs: 1000 },
+    hard:   { size: 40, minDist: 75, goalMoveMs: 500 },
 };
 
 // ---- DOM refs ----
@@ -29,7 +32,6 @@ const winScreen = document.getElementById('win-screen');
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const timerEl = document.getElementById('timer');
-const winTimeEl = document.getElementById('win-time');
 const winSceneCanvas = document.getElementById('win-scene');
 
 // ---- Menu logic ----
@@ -75,6 +77,7 @@ function showScreen(screen) {
 
 function backToMenu() {
     stopTimer();
+    stopGoalMovement();
     showScreen(menuScreen);
 }
 
@@ -107,13 +110,74 @@ function getElapsedTime() {
     return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
 }
 
+// ---- Goal movement ----
+function getValidGoalMoves() {
+    const maze = state.maze;
+    const gx = state.goalX;
+    const gy = state.goalY;
+
+    const moves = [];
+    if (!maze[gy][gx].n && gy - 1 >= 0) moves.push({ x: gx, y: gy - 1 });
+    if (!maze[gy][gx].s && gy + 1 < state.mazeHeight) moves.push({ x: gx, y: gy + 1 });
+    if (!maze[gy][gx].w && gx - 1 >= 0) moves.push({ x: gx - 1, y: gy });
+    if (!maze[gy][gx].e && gx + 1 < state.mazeWidth) moves.push({ x: gx + 1, y: gy });
+
+    return moves.filter(m => m.x !== state.playerX || m.y !== state.playerY);
+}
+
+function moveGoalTowardsPlayer() {
+    if (state.won) return;
+    const filtered = getValidGoalMoves();
+    if (filtered.length === 0) return;
+
+    const dist = bfsDistances(state.maze, state.playerX, state.playerY);
+    filtered.sort((a, b) => dist[a.y][a.x] - dist[b.y][b.x]);
+    const bestDist = dist[filtered[0].y][filtered[0].x];
+    const best = filtered.filter(m => dist[m.y][m.x] === bestDist);
+    const pick = best[Math.floor(Math.random() * best.length)];
+
+    state.goalX = pick.x;
+    state.goalY = pick.y;
+    render();
+}
+
+function moveGoalRandomly() {
+    if (state.won) return;
+    const filtered = getValidGoalMoves();
+    if (filtered.length === 0) return;
+
+    const pick = filtered[Math.floor(Math.random() * filtered.length)];
+    state.goalX = pick.x;
+    state.goalY = pick.y;
+    render();
+}
+
+function startGoalMovement(intervalMs) {
+    const moveFn = state.difficulty === 'easy' ? moveGoalTowardsPlayer : moveGoalRandomly;
+    state.goalInterval = setTimeout(() => {
+        moveFn();
+        state.goalInterval = setInterval(moveFn, intervalMs);
+    }, 1000);
+}
+
+function stopGoalMovement() {
+    if (state.goalInterval) {
+        clearTimeout(state.goalInterval);
+        clearInterval(state.goalInterval);
+        state.goalInterval = null;
+    }
+}
+
 // ---- Game init ----
 function startGame() {
     const diff = DIFFICULTIES[state.difficulty];
     state.mazeWidth = diff.size;
     state.mazeHeight = diff.size;
     state.won = false;
+    state.steps = 0;
     state.fogOfWar = document.getElementById('fog-toggle').checked;
+    state.movingGoal = document.getElementById('moving-goal-toggle').checked;
+    stopGoalMovement();
 
     // Generate maze
     state.maze = generateMaze(state.mazeWidth, state.mazeHeight);
@@ -134,6 +198,9 @@ function startGame() {
         resizeCanvas();
         render();
         startTimer();
+        if (state.movingGoal) {
+            startGoalMovement(diff.goalMoveMs);
+        }
     });
 }
 
@@ -305,6 +372,7 @@ function movePlayer(dx, dy) {
 
     state.playerX = nx;
     state.playerY = ny;
+    state.steps++;
 
     render();
 
@@ -317,8 +385,17 @@ function movePlayer(dx, dy) {
 function winGame() {
     state.won = true;
     stopTimer();
+    stopGoalMovement();
     const time = getElapsedTime();
-    winTimeEl.textContent = `Time: ${time}`;
+    const elapsedSec = (Date.now() - state.timerStart) / 1000;
+    const stepsPerSec = elapsedSec > 0 ? (state.steps / elapsedSec).toFixed(2) : '0.00';
+    const diffLabel = state.difficulty.charAt(0).toUpperCase() + state.difficulty.slice(1);
+
+    document.getElementById('win-stats').innerHTML =
+        `<p>Difficulty: <span>${diffLabel}</span></p>` +
+        `<p>Time: <span>${time}</span></p>` +
+        `<p>Steps: <span>${state.steps}</span></p>` +
+        `<p>Avg: <span>${stepsPerSec} steps/sec</span></p>`;
 
     // Draw win scene
     const wCtx = winSceneCanvas.getContext('2d');

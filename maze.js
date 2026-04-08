@@ -57,7 +57,40 @@ function generateMaze(width, height) {
         }
     }
 
+    // Add loops by removing some extra walls to create multiple paths
+    addLoops(grid, width, height);
+
     return grid;
+}
+
+// Remove a percentage of walls to create loops and alternate paths
+function addLoops(grid, width, height) {
+    const loopFactor = 0.15; // remove ~15% of remaining walls
+    const candidates = [];
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            if (x + 1 < width && grid[y][x].e) {
+                candidates.push({ x1: x, y1: y, x2: x + 1, y2: y, wall: 'e', opposite: 'w' });
+            }
+            if (y + 1 < height && grid[y][x].s) {
+                candidates.push({ x1: x, y1: y, x2: x, y2: y + 1, wall: 's', opposite: 'n' });
+            }
+        }
+    }
+
+    // Shuffle and remove a portion
+    for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const toRemove = Math.floor(candidates.length * loopFactor);
+    for (let i = 0; i < toRemove; i++) {
+        const c = candidates[i];
+        grid[c.y1][c.x1][c.wall] = false;
+        grid[c.y2][c.x2][c.opposite] = false;
+    }
 }
 
 // BFS to find shortest path distances from a start point

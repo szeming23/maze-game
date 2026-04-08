@@ -52,6 +52,13 @@
                     Fog of War
                 </label>
             </div>
+            <div class="option-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="moving-goal-toggle" checked>
+                    <span class="toggle-switch"></span>
+                    Moving Goal
+                </label>
+            </div>
         </div>
 
         <button id="start-btn" class="start-btn">Start Game</button>
@@ -82,7 +89,7 @@
         <div class="win-content">
             <canvas id="win-scene" width="200" height="200"></canvas>
             <h1>You found your love!</h1>
-            <p id="win-time"></p>
+            <div id="win-stats" class="win-stats"></div>
             <button id="play-again-btn" class="start-btn">Play Again</button>
             <button id="menu-btn" class="start-btn secondary">Main Menu</button>
         </div>

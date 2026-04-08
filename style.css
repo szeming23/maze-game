@@ -347,6 +347,19 @@ h1 {
     image-rendering: pixelated;
 }
 
+.win-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 1.1rem;
+    color: #aaa;
+}
+
+.win-stats span {
+    color: #e94560;
+    font-weight: bold;
+}
+
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
