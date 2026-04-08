@@ -57,40 +57,62 @@ function generateMaze(width, height) {
         }
     }
 
-    // Add loops by removing some extra walls to create multiple paths
-    addLoops(grid, width, height);
-
     return grid;
 }
 
-// Remove a percentage of walls to create loops and alternate paths
-function addLoops(grid, width, height) {
-    const loopFactor = 0.15; // remove ~15% of remaining walls
+// Add loops by removing a fixed number of walls
+// Only remove a wall if both remaining segments on each side are 0 or >= 3
+function addLoops(grid, width, height, count) {
     const candidates = [];
 
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             if (x + 1 < width && grid[y][x].e) {
-                candidates.push({ x1: x, y1: y, x2: x + 1, y2: y, wall: 'e', opposite: 'w' });
+                candidates.push({ x: x, y: y, wall: 'e', opposite: 'w', nx: x + 1, ny: y });
             }
             if (y + 1 < height && grid[y][x].s) {
-                candidates.push({ x1: x, y1: y, x2: x, y2: y + 1, wall: 's', opposite: 'n' });
+                candidates.push({ x: x, y: y, wall: 's', opposite: 'n', nx: x, ny: y + 1 });
             }
         }
     }
 
-    // Shuffle and remove a portion
+    // Shuffle candidates
     for (let i = candidates.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
 
-    const toRemove = Math.floor(candidates.length * loopFactor);
-    for (let i = 0; i < toRemove; i++) {
+    let removed = 0;
+    for (let i = 0; i < candidates.length && removed < count; i++) {
         const c = candidates[i];
-        grid[c.y1][c.x1][c.wall] = false;
-        grid[c.y2][c.x2][c.opposite] = false;
+        if (canRemoveWall(grid, c.x, c.y, c.wall, width, height)) {
+            grid[c.y][c.x][c.wall] = false;
+            grid[c.ny][c.nx][c.opposite] = false;
+            removed++;
+        }
     }
+}
+
+// Check if removing a wall leaves remaining segments of length 0 or >= 3
+function canRemoveWall(grid, x, y, wall, width, height) {
+    if (wall === 'e' || wall === 'w') {
+        // Vertical segment — runs along y axis
+        let above = 0;
+        for (let dy = 1; y - dy >= 0 && grid[y - dy][x][wall]; dy++) above++;
+        let below = 0;
+        for (let dy = 1; y + dy < height && grid[y + dy][x][wall]; dy++) below++;
+        if (above > 0 && above < 3) return false;
+        if (below > 0 && below < 3) return false;
+    } else {
+        // Horizontal segment — runs along x axis
+        let left = 0;
+        for (let dx = 1; x - dx >= 0 && grid[y][x - dx][wall]; dx++) left++;
+        let right = 0;
+        for (let dx = 1; x + dx < width && grid[y][x + dx][wall]; dx++) right++;
+        if (left > 0 && left < 3) return false;
+        if (right > 0 && right < 3) return false;
+    }
+    return true;
 }
 
 // BFS to find shortest path distances from a start point

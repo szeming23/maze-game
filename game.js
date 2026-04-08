@@ -20,9 +20,9 @@ const state = {
 };
 
 const DIFFICULTIES = {
-    easy:   { size: 10, minDist: 30, goalMoveMs: 2000 },
-    medium: { size: 20, minDist: 45, goalMoveMs: 1000 },
-    hard:   { size: 40, minDist: 75, goalMoveMs: 500 },
+    easy:   { size: 15, minDist: 30, goalMoveMs: 2000, loopWalls: 10 },
+    medium: { size: 25, minDist: 45, goalMoveMs: 1000, loopWalls: 25 },
+    hard:   { size: 50, minDist: 75, goalMoveMs: 500, loopWalls: 60 },
 };
 
 // ---- DOM refs ----
@@ -179,8 +179,9 @@ function startGame() {
     state.movingGoal = document.getElementById('moving-goal-toggle').checked;
     stopGoalMovement();
 
-    // Generate maze
+    // Generate maze then add loops
     state.maze = generateMaze(state.mazeWidth, state.mazeHeight);
+    addLoops(state.maze, state.mazeWidth, state.mazeHeight, diff.loopWalls);
 
     // Player starts in center
     state.playerX = Math.floor(state.mazeWidth / 2);
