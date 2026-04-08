@@ -13,12 +13,13 @@ const state = {
     timerStart: 0,
     timerInterval: null,
     won: false,
+    fogOfWar: false,
 };
 
 const DIFFICULTIES = {
-    easy:   { size: 15, minDist: 15 },
-    medium: { size: 25, minDist: 25 },
-    hard:   { size: 50, minDist: 50 },
+    easy:   { size: 10, minDist: 30 },
+    medium: { size: 20, minDist: 45 },
+    hard:   { size: 40, minDist: 75 },
 };
 
 // ---- DOM refs ----
@@ -112,6 +113,7 @@ function startGame() {
     state.mazeWidth = diff.size;
     state.mazeHeight = diff.size;
     state.won = false;
+    state.fogOfWar = document.getElementById('fog-toggle').checked;
 
     // Generate maze
     state.maze = generateMaze(state.mazeWidth, state.mazeHeight);
@@ -125,138 +127,158 @@ function startGame() {
     state.goalX = goal.x;
     state.goalY = goal.y;
 
-    // Calculate cell size to fit canvas
-    resizeCanvas();
-
     showScreen(gameScreen);
-    startTimer();
-    render();
+
+    // Resize after screen is visible so wrapper has dimensions
+    requestAnimationFrame(() => {
+        resizeCanvas();
+        render();
+        startTimer();
+    });
 }
 
 // ---- Canvas sizing ----
-// Viewport shows a fixed number of cells centered on the player
-const VIEW_CELLS = 7; // 7x7 viewport (player in center, 3 cells each side)
+const VIEW_CELLS_FOG = 7; // 7x7 viewport when fog is on
 
 function resizeCanvas() {
     const wrapper = document.querySelector('.canvas-wrapper');
     const availW = wrapper.clientWidth;
     const availH = wrapper.clientHeight;
 
-    // Size cells to fill the viewport area
-    const maxCellFromWidth = Math.floor(availW / VIEW_CELLS);
-    const maxCellFromHeight = Math.floor(availH / VIEW_CELLS);
-    state.cellSize = Math.max(16, Math.min(maxCellFromWidth, maxCellFromHeight, 80));
+    if (state.fogOfWar) {
+        // Internal resolution for fog viewport
+        const cellRes = 48;
+        state.cellSize = cellRes;
+        canvas.width = VIEW_CELLS_FOG * cellRes;
+        canvas.height = VIEW_CELLS_FOG * cellRes;
+    } else {
+        // Internal resolution for full maze
+        const cellRes = 16;
+        state.cellSize = cellRes;
+        canvas.width = state.mazeWidth * cellRes;
+        canvas.height = state.mazeHeight * cellRes;
+    }
 
-    canvas.width = VIEW_CELLS * state.cellSize;
-    canvas.height = VIEW_CELLS * state.cellSize;
-    canvas.style.width = canvas.width + 'px';
-    canvas.style.height = canvas.height + 'px';
+    // Scale canvas element to fill available space while keeping aspect ratio
+    const scaleX = availW / canvas.width;
+    const scaleY = availH / canvas.height;
+    const scale = Math.min(scaleX, scaleY);
+    canvas.style.width = Math.floor(canvas.width * scale) + 'px';
+    canvas.style.height = Math.floor(canvas.height * scale) + 'px';
 }
 
 // ---- Rendering ----
 function render() {
+    if (state.fogOfWar) {
+        renderFog();
+    } else {
+        renderFull();
+    }
+}
+
+function renderFull() {
+    const cs = state.cellSize;
+    const maze = state.maze;
+    const w = state.mazeWidth;
+    const h = state.mazeHeight;
+
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const cell = maze[y][x];
+            const sx = x * cs;
+            const sy = y * cs;
+
+            // Floor
+            ctx.fillStyle = '#252540';
+            ctx.fillRect(sx, sy, cs, cs);
+
+            // Walls
+            ctx.strokeStyle = '#6488c8';
+            ctx.lineWidth = Math.max(1, cs / 8);
+
+            if (cell.n) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + cs, sy); ctx.stroke(); }
+            if (cell.s) { ctx.beginPath(); ctx.moveTo(sx, sy + cs); ctx.lineTo(sx + cs, sy + cs); ctx.stroke(); }
+            if (cell.w) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + cs); ctx.stroke(); }
+            if (cell.e) { ctx.beginPath(); ctx.moveTo(sx + cs, sy); ctx.lineTo(sx + cs, sy + cs); ctx.stroke(); }
+        }
+    }
+
+    // Draw goal
+    const goalSprite = getGoalSprite(state.gender);
+    const goalPalette = getGoalPalette(state.gender);
+    drawSprite(ctx, goalSprite, state.goalX * cs, state.goalY * cs, cs, goalPalette);
+    const heartSize = cs * 0.5;
+    drawSpriteScaled(ctx, SPRITE_HEART,
+        state.goalX * cs + (cs - heartSize) / 2,
+        state.goalY * cs - heartSize * 0.3,
+        heartSize, getHeartPalette());
+
+    // Draw player
+    const playerSprite = getPlayerSprite(state.gender);
+    const playerPalette = getPlayerPalette(state.gender);
+    drawSprite(ctx, playerSprite, state.playerX * cs, state.playerY * cs, cs, playerPalette);
+}
+
+function renderFog() {
     const cs = state.cellSize;
     const maze = state.maze;
     const px = state.playerX;
     const py = state.playerY;
-    const visionRadius = 1.5; // cells — reveals the 8 adjacent cells
-    const half = Math.floor(VIEW_CELLS / 2); // cells visible each side of player
+    const visionRadius = 1.5;
+    const half = Math.floor(VIEW_CELLS_FOG / 2);
 
-    // Camera: player is always at center of viewport
-    // camX/camY = maze coords of the top-left cell in viewport
     const camX = px - half;
     const camY = py - half;
 
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw cells in viewport
-    for (let vy = 0; vy < VIEW_CELLS; vy++) {
-        for (let vx = 0; vx < VIEW_CELLS; vx++) {
-            const mx = camX + vx; // maze x
-            const my = camY + vy; // maze y
-
-            // Screen position
+    for (let vy = 0; vy < VIEW_CELLS_FOG; vy++) {
+        for (let vx = 0; vx < VIEW_CELLS_FOG; vx++) {
+            const mx = camX + vx;
+            const my = camY + vy;
             const sx = vx * cs;
             const sy = vy * cs;
 
-            // Distance from player
             const dx = mx - px;
             const dy = my - py;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            // Outside vision — stays black
             if (dist > visionRadius) continue;
-
-            // Outside maze bounds — stays black
             if (mx < 0 || mx >= state.mazeWidth || my < 0 || my >= state.mazeHeight) continue;
 
             const cell = maze[my][mx];
-
-            // Floor with brightness falloff
             const brightness = Math.max(0, 1 - dist / (visionRadius + 0.5));
-            const floorR = Math.floor(40 * brightness) + 15;
-            const floorG = Math.floor(36 * brightness) + 15;
-            const floorB = Math.floor(58 * brightness) + 20;
-            ctx.fillStyle = `rgb(${floorR}, ${floorG}, ${floorB})`;
+
+            ctx.fillStyle = `rgb(${Math.floor(40 * brightness) + 15}, ${Math.floor(36 * brightness) + 15}, ${Math.floor(58 * brightness) + 20})`;
             ctx.fillRect(sx, sy, cs, cs);
 
-            // Walls
             ctx.strokeStyle = `rgba(100, 140, 200, ${brightness})`;
             ctx.lineWidth = Math.max(2, cs / 6);
 
-            if (cell.n) {
-                ctx.beginPath();
-                ctx.moveTo(sx, sy);
-                ctx.lineTo(sx + cs, sy);
-                ctx.stroke();
-            }
-            if (cell.s) {
-                ctx.beginPath();
-                ctx.moveTo(sx, sy + cs);
-                ctx.lineTo(sx + cs, sy + cs);
-                ctx.stroke();
-            }
-            if (cell.w) {
-                ctx.beginPath();
-                ctx.moveTo(sx, sy);
-                ctx.lineTo(sx, sy + cs);
-                ctx.stroke();
-            }
-            if (cell.e) {
-                ctx.beginPath();
-                ctx.moveTo(sx + cs, sy);
-                ctx.lineTo(sx + cs, sy + cs);
-                ctx.stroke();
-            }
+            if (cell.n) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + cs, sy); ctx.stroke(); }
+            if (cell.s) { ctx.beginPath(); ctx.moveTo(sx, sy + cs); ctx.lineTo(sx + cs, sy + cs); ctx.stroke(); }
+            if (cell.w) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + cs); ctx.stroke(); }
+            if (cell.e) { ctx.beginPath(); ctx.moveTo(sx + cs, sy); ctx.lineTo(sx + cs, sy + cs); ctx.stroke(); }
 
-            // Draw goal if on this cell
             if (mx === state.goalX && my === state.goalY) {
-                const goalSprite = getGoalSprite(state.gender);
-                const goalPalette = getGoalPalette(state.gender);
-                drawSprite(ctx, goalSprite, sx, sy, cs, goalPalette);
-
-                // Heart above goal
-                const heartSize = cs * 0.5;
-                const heartX = sx + (cs - heartSize) / 2;
-                const heartY = sy - heartSize * 0.3;
-                drawSpriteScaled(ctx, SPRITE_HEART, heartX, heartY, heartSize, getHeartPalette());
+                drawSprite(ctx, getGoalSprite(state.gender), sx, sy, cs, getGoalPalette(state.gender));
+                const hs = cs * 0.5;
+                drawSpriteScaled(ctx, SPRITE_HEART, sx + (cs - hs) / 2, sy - hs * 0.3, hs, getHeartPalette());
             }
         }
     }
 
-    // Draw player at center of viewport
-    const playerSprite = getPlayerSprite(state.gender);
-    const playerPalette = getPlayerPalette(state.gender);
-    drawSprite(ctx, playerSprite, half * cs, half * cs, cs, playerPalette);
+    // Player at center
+    drawSprite(ctx, getPlayerSprite(state.gender), half * cs, half * cs, cs, getPlayerPalette(state.gender));
 
-    // Fog-of-war gradient overlay
+    // Fog gradient
     const centerX = (half + 0.5) * cs;
     const centerY = (half + 0.5) * cs;
-    const innerR = visionRadius * cs * 0.7;
-    const outerR = (visionRadius + 0.5) * cs;
-
-    const grad = ctx.createRadialGradient(centerX, centerY, innerR, centerX, centerY, outerR);
+    const grad = ctx.createRadialGradient(centerX, centerY, visionRadius * cs * 0.7, centerX, centerY, (visionRadius + 0.5) * cs);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
     grad.addColorStop(1, 'rgba(0,0,0,1)');
     ctx.fillStyle = grad;
